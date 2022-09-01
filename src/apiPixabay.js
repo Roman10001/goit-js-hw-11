@@ -1,6 +1,6 @@
 import axios from 'axios';
 const BASE_URL =
-  'https://pixabay.com/api/?key: 29629302-abb150ceeb95ece7f01e6af14';
+  'https://pixabay.com/api/?key = 29629302-abb150ceeb95ece7f01e6af14';
 
 const BASE_PARAMS = 'image_type=photo&orientation=horizontal&safesearch=true';
 
