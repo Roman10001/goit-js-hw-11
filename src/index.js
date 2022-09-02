@@ -1,111 +1,79 @@
-import axios from 'axios';
-import { Notify } from 'notiflix/build/notiflix-notify-aio';
+// Libraries
+import Notiflix from 'notiflix';
 import SimpleLightbox from 'simplelightbox';
 import 'simplelightbox/dist/simple-lightbox.min.css';
-import { ApiPixabay } from './apiPixabay';
-import { createMarkup } from './markup';
 
-export const refs = {
-  form: document.querySelector('.search-form'),
-  div: document.querySelector('.gallery'),
-  btnLoadMore: document.querySelector('.load-more'),
-};
+// Other js files
+import renderImages from './js/templates/imagesMarkup';
+import { fetchImages } from './js/services/imagesApi';
+import refs from './js/services/getRefs';
 
-refs.form.addEventListener('submit', onFormSubmit);
-refs.btnLoadMore.addEventListener('click', onbtnLoadMoreClick);
+// Sass styles
+import './sass/_example.scss';
 
-hiddenLoadMoreBtn();
+let simpleLightBox = new SimpleLightbox('.gallery a');
+let perPage = 40;
+let page = 1;
+let inputValue = '';
 
-var lightbox = new SimpleLightbox('.gallery a');
-
-const newApiPixabay = new ApiPixabay();
-
-function onFormSubmit(e) {
+const onSearch = async e => {
   e.preventDefault();
-  resetMarkup();
+  inputValue = e.currentTarget.searchQuery.value.trim();
+  refs.gallery.innerHTML = '';
+  page = 1;
 
-  newApiPixabay.query = e.currentTarget.elements.searchQuery.value;
-
-  handlingQuery();
-}
-
-// асинхронная функция для обработки нашего запроса, она принимает ответ от бекенда и вызывает генерацию разметки
-async function handlingQuery() {
   try {
-    hiddenLoadMoreBtn();
-    newApiPixabay.resetPage();
-    const getAPI = await newApiPixabay.apiPixabay();
-    console.log(getAPI.data.hits);
+    const { hits, totalHits } = await fetchImages(inputValue, perPage, page);
 
-    if (getAPI.data.hits.length === 0) {
-      Notify.failure(
+    if (hits.length === 0 || !inputValue.trim()) {
+      Notiflix.Notify.failure(
         'Sorry, there are no images matching your search query. Please try again.'
       );
       return;
     }
-
-    createMarkup(getAPI.data.hits);
-
-    // обновляет то, что появилось в моем ДОМе
-    lightbox.refresh();
-
-    //функция для показа кол-ва найденных изображений
-    showTotalHits(getAPI.data.totalHits);
-    showLoadMoreBtn();
+    Notiflix.Notify.success(`Hooray! We found ${totalHits} images.`);
+    renderImages(hits);
+    simpleLightBox.refresh();
   } catch (error) {
-    console.log(error);
+    Notiflix.Notify.failure(
+      'Sorry, there are no images matching your search query. Please try again.'
+    );
   }
-}
+};
+refs.form.addEventListener('submit', onSearch);
 
-// функция для обработки запроса при повторном нажатии на вторую кнопку
-async function onbtnLoadMoreClick(e) {
+const loadMoreContent = async () => {
+  page += 1;
+
   try {
-    newApiPixabay.changePage();
-    const getAPIAgain = await newApiPixabay.apiPixabay();
+    const { hits, totalHits } = await fetchImages(inputValue, perPage, page);
+    const lastPage = Math.ceil(totalHits / perPage);
 
-    createMarkup(getAPIAgain.data.hits);
-
-    lightbox.refresh();
-
-    scroll();
-
-    if (
-      // если кол-во запрашиваемых элементов будет больше, чем есть на бекенде
-      newApiPixabay.page * newApiPixabay.perPage >=
-      getAPIAgain.data.totalHits
-    ) {
-      Notify.info("We're sorry, but you've reached the end of search results.");
-      hiddenLoadMoreBtn();
+    if (page > lastPage) {
+      Notiflix.Notify.failure(
+        "We're sorry, but you've reached the end of search results."
+      );
+      return;
     }
+
+    renderImages(hits);
+    simpleLightBox.refresh();
   } catch (error) {
-    console.log(error);
+    Notiflix.Notify.failure(
+      'Sorry, there are no images matching your search query. Please try again.'
+    );
   }
-}
+};
 
-// функция для показа общего количества изображений
-function showTotalHits(totalHits) {
-  Notify.success(`Hooray! We found ${totalHits} images.`);
-}
-
-function scroll() {
-  const { height: cardHeight } = document
-    .querySelector('.gallery')
-    .firstElementChild.getBoundingClientRect();
-
-  window.scrollBy({
-    top: cardHeight * 2,
-    behavior: 'smooth',
-  });
-}
-
-function resetMarkup() {
-  refs.div.innerHTML = '';
-}
-
-function hiddenLoadMoreBtn() {
-  refs.btnLoadMore.style.display = 'none';
-}
-
-function showLoadMoreBtn() {
-  refs.btnLoadMore.style.display = 'block';
-}
+const infiniteObserver = new IntersectionObserver(
+  ([entry], observer) => {
+    if (entry.isIntersecting) {
+      observer.unobserve(entry.target);
+      loadMoreContent();
+    }
+  },
+  {
+    threshold: 1,
+  }
+);
+export default infiniteObserver;
